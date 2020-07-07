@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-pub fn column<T, A>(name: T, column_type: Type, attributes: A) -> Column
+use std::rc::Rc;
+
+pub fn column<T, A>(name: T, column_type: Type, attributes: A) -> Rc<Column>
 where
     T: Into<String>,
     A: Into<Vec<Attribute>>,
@@ -23,15 +25,15 @@ where
         data if data.is_empty() => None,
         data => Some(data),
     };
-    Column::Column {
+    Rc::new(Column::Column {
         name: name.into(),
         column_type,
         attributes,
-    }
+    })
 }
 
-pub fn primary_key<K: AsRef<[Column]>>(keys: K) -> Column {
-    Column::Constraint(format!(
+pub fn primary_key<K: AsRef<[Rc<Column>]>>(keys: K) -> Rc<Column> {
+    Rc::new(Column::Constraint(format!(
         "{} ({})",
         Attribute::PRIMARY_KEY.name(),
         keys.as_ref()
@@ -39,24 +41,24 @@ pub fn primary_key<K: AsRef<[Column]>>(keys: K) -> Column {
             .map(|data| data.name().to_owned())
             .collect::<Vec<_>>()
             .join(", ")
-    ))
+    )))
 }
 
 pub fn foreign_key<T: Into<String>>(
-    column_name: &Column,
+    column_name: Rc<Column>,
     other_table_name: T,
-    other_table_column_name: &Column,
-) -> Column {
-    Column::Constraint(format!(
+    other_table_column: Rc<Column>,
+) -> Rc<Column> {
+    Rc::new(Column::Constraint(format!(
         "FOREIGN KEY ({}) REFERENCES {} ({})",
         column_name.name(),
         other_table_name.into(),
-        other_table_column_name.name()
-    ))
+        other_table_column.name()
+    )))
 }
 
-pub fn unique<'k, K: AsRef<[&'k Column]>>(keys: K) -> Column {
-    Column::Constraint(format!(
+pub fn unique<K: AsRef<[Rc<Column>]>>(keys: K) -> Rc<Column> {
+    Rc::new(Column::Constraint(format!(
         "{} ({})",
         Attribute::UNIQUE.name(),
         keys.as_ref()
@@ -64,7 +66,7 @@ pub fn unique<'k, K: AsRef<[&'k Column]>>(keys: K) -> Column {
             .map(|data| data.name())
             .collect::<Vec<_>>()
             .join(", ")
-    ))
+    )))
 }
 
 #[allow(non_camel_case_types)]
@@ -152,31 +154,21 @@ fn escape_string<T: Into<String>>(value: T) -> String {
     }
 }
 
-pub struct Table {
-    pub name: String,
-    pub columns: String,
-}
+pub trait Table {
+    fn name(&self) -> &str;
 
-impl Table {
-    pub fn new<'k, T, K>(name: T, columns: K) -> Self
-    where
-        T: Into<String>,
-        K: AsRef<[&'k Column]>,
-    {
-        // TODO: concat(column, rest).
-        Self {
-            name: name.into(),
-            columns: columns
-                .as_ref()
+    fn columns(&self) -> &[Rc<Column>];
+
+    fn create_sql(&self) -> String {
+        format!(
+            "CREATE TABLE {} ({})",
+            self.name(),
+            self.columns()
                 .iter()
                 .map(|data| data.create_statement())
                 .collect::<Vec<_>>()
-                .join(", "),
-        }
-    }
-
-    pub fn create_sql(&self) -> String {
-        format!("CREATE TABLE {} ({})", self.name, self.columns)
+                .join(", ")
+        )
     }
 }
 
@@ -234,7 +226,8 @@ impl Column {
 mod tests {
     use crate::Attribute::{DEFAULT, NOT_NULL, PRIMARY_KEY};
     use crate::Type::{INTEGER, TEXT};
-    use crate::{column, unique, Table};
+    use crate::{column, foreign_key, unique, Column, Table};
+    use std::rc::Rc;
 
     #[test]
     fn empty_arr() {
@@ -250,19 +243,75 @@ mod tests {
 
     #[test]
     fn my_database() {
-        let hoge = column("hoge", TEXT, []);
-        let table = Table::new(
-            "my-table",
-            [
-                &column("id", INTEGER, [PRIMARY_KEY, NOT_NULL]),
-                &column("val", TEXT, [DEFAULT("def".into())]),
-                &hoge,
-                &unique([&hoge]),
-            ],
-        );
+        struct MyTable {
+            hoge_column: Rc<Column>,
+            columns: Vec<Rc<Column>>,
+        }
+
+        impl MyTable {
+            fn new() -> Self {
+                let hoge_column = column("hoge", TEXT, []);
+                Self {
+                    hoge_column: hoge_column.clone(),
+                    columns: vec![
+                        column("id", INTEGER, [PRIMARY_KEY, NOT_NULL]),
+                        column("val", TEXT, [DEFAULT("def".into())]),
+                        hoge_column.clone(),
+                        unique([hoge_column]),
+                    ],
+                }
+            }
+        }
+
+        impl Table for MyTable {
+            fn name(&self) -> &str {
+                "my-table"
+            }
+
+            fn columns(&self) -> &[Rc<Column>] {
+                &self.columns
+            }
+        }
+
+        let my_table = MyTable::new();
+
         assert_eq!(
-            table.create_sql(),
+            MyTable::new().create_sql(),
             "CREATE TABLE my-table (id INTEGER PRIMARY KEY NOT NULL, val TEXT DEFAULT 'def', hoge TEXT, UNIQUE (hoge))"
         );
+
+        struct ForeignTable {
+            columns: Vec<Rc<Column>>,
+        }
+
+        impl ForeignTable {
+            fn new(my_table: &MyTable) -> Self {
+                let rc_column = column("id", INTEGER, [PRIMARY_KEY, NOT_NULL]);
+                Self {
+                    columns: vec![
+                        rc_column.clone(),
+                        foreign_key(
+                            rc_column.clone(),
+                            my_table.name(),
+                            my_table.hoge_column.clone(),
+                        ),
+                    ],
+                }
+            }
+        }
+
+        impl Table for ForeignTable {
+            fn name(&self) -> &str {
+                "foreign-table"
+            }
+
+            fn columns(&self) -> &[Rc<Column>] {
+                &self.columns
+            }
+        }
+
+        assert_eq!(
+            ForeignTable::new(&my_table).create_sql(),
+            "CREATE TABLE foreign-table (id INTEGER PRIMARY KEY NOT NULL, FOREIGN KEY (id) REFERENCES my-table (hoge))")
     }
 }
