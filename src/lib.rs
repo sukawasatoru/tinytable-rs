@@ -225,8 +225,12 @@ impl Column {
 #[cfg(test)]
 mod tests {
     use crate::Attribute::{DEFAULT, NOT_NULL, PRIMARY_KEY};
-    use crate::Type::{INTEGER, TEXT};
-    use crate::{column, foreign_key, unique, Column, Table};
+    use crate::Type::{
+        BIGINT, BLOB, BOOLEAN, CLOB, DATE, DATETIME, DOUBLE, DOUBLE_PRECISION, FLOAT, INT, INT2,
+        INT8, INTEGER, MEDIUMINT, NUMERIC, REAL, SMALLINT, TEXT, TINYINT, UNSIGNED_BIG_INT,
+    };
+    use crate::{column, foreign_key, primary_key, unique, Column, Table};
+    use rusqlite::params;
     use std::rc::Rc;
 
     #[test]
@@ -242,7 +246,152 @@ mod tests {
     }
 
     #[test]
-    fn my_database() {
+    fn all_types() {
+        let integer = column("integer", INTEGER, []);
+        let int = column("int", INT, []);
+        let tinyint = column("tinyint", TINYINT, []);
+        let smallint = column("smallint", SMALLINT, []);
+        let mediumint = column("mediumint", MEDIUMINT, []);
+        let bigint = column("bigint", BIGINT, []);
+        let unsigned_big_int = column("unsigned_big_int", UNSIGNED_BIG_INT, []);
+        let int2 = column("int2", INT2, []);
+        let int8 = column("int8", INT8, []);
+        let text = column("text", TEXT, []);
+        let clob = column("clob", CLOB, []);
+        let blob = column("blob", BLOB, []);
+        let real = column("real", REAL, []);
+        let double = column("double", DOUBLE, []);
+        let double_precision = column("double_precision", DOUBLE_PRECISION, []);
+        let float = column("float", FLOAT, []);
+        let numeric = column("numeric", NUMERIC, []);
+        let boolean = column("boolean", BOOLEAN, []);
+        let date = column("date", DATE, []);
+        let datetime = column("datetime", DATETIME, []);
+
+        struct MyTable {
+            columns: Vec<Rc<Column>>,
+        }
+
+        impl Table for MyTable {
+            fn name(&self) -> &str {
+                "my_table"
+            }
+
+            fn columns(&self) -> &[Rc<Column>] {
+                &self.columns
+            }
+        }
+
+        let sql = MyTable {
+            columns: vec![
+                integer.clone(),
+                int.clone(),
+                tinyint.clone(),
+                smallint.clone(),
+                mediumint.clone(),
+                bigint.clone(),
+                unsigned_big_int.clone(),
+                int2.clone(),
+                int8.clone(),
+                text.clone(),
+                clob.clone(),
+                blob.clone(),
+                real.clone(),
+                double.clone(),
+                double_precision.clone(),
+                float.clone(),
+                numeric.clone(),
+                boolean.clone(),
+                date.clone(),
+                datetime.clone(),
+            ],
+        }
+        .create_sql();
+
+        assert_eq!(
+            sql,
+            format!("CREATE TABLE my_table ({} INTEGER, {} INT, {} TINYINT, {} SMALLINT, {} MEDIUMINT, {} BIGINT, {} UNSIGNED BIG INT, {} INT2, {} INT8, {} TEXT, {} CLOB, {} BLOB, {} REAL, {} DOUBLE, {} DOUBLE PRECISION, {} FLOAT, {} NUMERIC, {} BOOLEAN, {} DATE, {} DATETIME)",
+                    integer.name(), int.name(), tinyint.name(), smallint.name(), mediumint.name(), bigint.name(), unsigned_big_int.name(), int2.name(), int8.name(), text.name(), clob.name(), blob.name(), real.name(), double.name(), double_precision.name(), float.name(), numeric.name(), boolean.name(), date.name(), datetime.name()
+            ));
+
+        rusqlite::Connection::open_in_memory()
+            .unwrap()
+            .execute(&sql, params![])
+            .unwrap();
+    }
+
+    #[test]
+    fn unique_constraint() {
+        struct UniqueTable {
+            columns: Vec<Rc<Column>>,
+        }
+
+        impl Table for UniqueTable {
+            fn name(&self) -> &str {
+                "unique_table"
+            }
+
+            fn columns(&self) -> &[Rc<Column>] {
+                &self.columns
+            }
+        }
+
+        let col1 = column("val1", TEXT, []);
+        let col2 = column("val2", TEXT, []);
+        let sql = UniqueTable {
+            columns: vec![
+                column("id", INTEGER, [PRIMARY_KEY, NOT_NULL]),
+                col1.clone(),
+                col2.clone(),
+                unique([col1, col2]),
+            ],
+        }
+        .create_sql();
+
+        assert_eq!(sql, "CREATE TABLE unique_table (id INTEGER PRIMARY KEY NOT NULL, val1 TEXT, val2 TEXT, UNIQUE (val1, val2))");
+
+        rusqlite::Connection::open_in_memory()
+            .unwrap()
+            .execute(&sql, params![])
+            .unwrap();
+    }
+
+    #[test]
+    fn primary_constraint() {
+        struct PrimaryTable {
+            column: Vec<Rc<Column>>,
+        }
+
+        impl Table for PrimaryTable {
+            fn name(&self) -> &str {
+                "primary_table"
+            }
+
+            fn columns(&self) -> &[Rc<Column>] {
+                &self.column
+            }
+        }
+
+        let col1 = column("col1", TEXT, []);
+        let col2 = column("col2", TEXT, []);
+        let sql = PrimaryTable {
+            column: vec![col1.clone(), col2.clone(), primary_key([col1, col2])],
+        }
+        .create_sql();
+
+        assert_eq!(
+            sql,
+            "CREATE TABLE primary_table (col1 TEXT, col2 TEXT, PRIMARY KEY (col1, col2))"
+        );
+
+        rusqlite::Connection::open_in_memory()
+            .unwrap()
+            .execute(&sql, params![])
+            .unwrap();
+    }
+
+    #[test]
+    fn foreignkey() {
         struct MyTable {
             hoge_column: Rc<Column>,
             columns: Vec<Rc<Column>>,
@@ -257,7 +406,6 @@ mod tests {
                         column("id", INTEGER, [PRIMARY_KEY, NOT_NULL]),
                         column("val", TEXT, [DEFAULT("def".into())]),
                         hoge_column.clone(),
-                        unique([hoge_column]),
                     ],
                 }
             }
@@ -265,7 +413,7 @@ mod tests {
 
         impl Table for MyTable {
             fn name(&self) -> &str {
-                "my-table"
+                "my_table"
             }
 
             fn columns(&self) -> &[Rc<Column>] {
@@ -275,10 +423,16 @@ mod tests {
 
         let my_table = MyTable::new();
 
+        let mytable_sql = MyTable::new().create_sql();
         assert_eq!(
-            MyTable::new().create_sql(),
-            "CREATE TABLE my-table (id INTEGER PRIMARY KEY NOT NULL, val TEXT DEFAULT 'def', hoge TEXT, UNIQUE (hoge))"
+            mytable_sql,
+            "CREATE TABLE my_table (id INTEGER PRIMARY KEY NOT NULL, val TEXT DEFAULT 'def', hoge TEXT)"
         );
+
+        rusqlite::Connection::open_in_memory()
+            .unwrap()
+            .execute(&mytable_sql, params![])
+            .unwrap();
 
         struct ForeignTable {
             columns: Vec<Rc<Column>>,
@@ -302,7 +456,7 @@ mod tests {
 
         impl Table for ForeignTable {
             fn name(&self) -> &str {
-                "foreign-table"
+                "foreign_table"
             }
 
             fn columns(&self) -> &[Rc<Column>] {
@@ -310,8 +464,14 @@ mod tests {
             }
         }
 
+        let foreigntable_sql = ForeignTable::new(&my_table).create_sql();
         assert_eq!(
-            ForeignTable::new(&my_table).create_sql(),
-            "CREATE TABLE foreign-table (id INTEGER PRIMARY KEY NOT NULL, FOREIGN KEY (id) REFERENCES my-table (hoge))")
+            foreigntable_sql,
+            "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY NOT NULL, FOREIGN KEY (id) REFERENCES my_table (hoge))");
+
+        rusqlite::Connection::open_in_memory()
+            .unwrap()
+            .execute(&foreigntable_sql, params![])
+            .unwrap();
     }
 }

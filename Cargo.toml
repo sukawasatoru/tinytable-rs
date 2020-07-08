@@ -7,3 +7,6 @@ description = "The Query generator for SQLite"
 documentation = "https://github.com/sukawasatoru/tinytable-rs"
 homepage = "https://github.com/sukawasatoru/tinytable-rs"
 repository = "https://github.com/sukawasatoru/tinytable-rs.git"
+
+[dev-dependencies]
+rusqlite = "=0.23.1"
