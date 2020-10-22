@@ -1,6 +1,6 @@
 [package]
 name = "tinytable-rs"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Satoru Sukawa <sukawasatoru.github@outlook.jp>"]
 edition = "2018"
 description = "The Query generator for SQLite"
@@ -9,4 +9,4 @@ homepage = "https://github.com/sukawasatoru/tinytable-rs"
 repository = "https://github.com/sukawasatoru/tinytable-rs.git"
 
 [dev-dependencies]
-rusqlite = "=0.23.1"
+rusqlite = "=0.24.1"

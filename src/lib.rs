@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::rc::Rc;
+use std::sync::Arc;
 
-pub fn column<T, A>(name: T, column_type: Type, attributes: A) -> Rc<Column>
+pub fn column<T, A>(name: T, column_type: Type, attributes: A) -> Arc<Column>
 where
     T: Into<String>,
     A: Into<Vec<Attribute>>,
@@ -25,15 +25,15 @@ where
         data if data.is_empty() => None,
         data => Some(data),
     };
-    Rc::new(Column::Column {
+    Arc::new(Column::Column {
         name: name.into(),
         column_type,
         attributes,
     })
 }
 
-pub fn primary_key<K: AsRef<[Rc<Column>]>>(keys: K) -> Rc<Column> {
-    Rc::new(Column::Constraint(format!(
+pub fn primary_key<K: AsRef<[Arc<Column>]>>(keys: K) -> Arc<Column> {
+    Arc::new(Column::Constraint(format!(
         "{} ({})",
         Attribute::PRIMARY_KEY.name(),
         keys.as_ref()
@@ -45,11 +45,11 @@ pub fn primary_key<K: AsRef<[Rc<Column>]>>(keys: K) -> Rc<Column> {
 }
 
 pub fn foreign_key<T: Into<String>>(
-    column_name: Rc<Column>,
+    column_name: Arc<Column>,
     other_table_name: T,
-    other_table_column: Rc<Column>,
-) -> Rc<Column> {
-    Rc::new(Column::Constraint(format!(
+    other_table_column: Arc<Column>,
+) -> Arc<Column> {
+    Arc::new(Column::Constraint(format!(
         "FOREIGN KEY ({}) REFERENCES {} ({})",
         column_name.name(),
         other_table_name.into(),
@@ -57,8 +57,8 @@ pub fn foreign_key<T: Into<String>>(
     )))
 }
 
-pub fn unique<K: AsRef<[Rc<Column>]>>(keys: K) -> Rc<Column> {
-    Rc::new(Column::Constraint(format!(
+pub fn unique<K: AsRef<[Arc<Column>]>>(keys: K) -> Arc<Column> {
+    Arc::new(Column::Constraint(format!(
         "{} ({})",
         Attribute::UNIQUE.name(),
         keys.as_ref()
@@ -157,7 +157,7 @@ fn escape_string<T: Into<String>>(value: T) -> String {
 pub trait Table {
     fn name(&self) -> &str;
 
-    fn columns(&self) -> &[Rc<Column>];
+    fn columns(&self) -> &[Arc<Column>];
 
     fn create_sql(&self) -> String {
         format!(
@@ -231,7 +231,7 @@ mod tests {
     };
     use crate::{column, foreign_key, primary_key, unique, Column, Table};
     use rusqlite::params;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     #[test]
     fn empty_arr() {
@@ -269,7 +269,7 @@ mod tests {
         let datetime = column("datetime", DATETIME, []);
 
         struct MyTable {
-            columns: Vec<Rc<Column>>,
+            columns: Vec<Arc<Column>>,
         }
 
         impl Table for MyTable {
@@ -277,7 +277,7 @@ mod tests {
                 "my_table"
             }
 
-            fn columns(&self) -> &[Rc<Column>] {
+            fn columns(&self) -> &[Arc<Column>] {
                 &self.columns
             }
         }
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn unique_constraint() {
         struct UniqueTable {
-            columns: Vec<Rc<Column>>,
+            columns: Vec<Arc<Column>>,
         }
 
         impl Table for UniqueTable {
@@ -331,7 +331,7 @@ mod tests {
                 "unique_table"
             }
 
-            fn columns(&self) -> &[Rc<Column>] {
+            fn columns(&self) -> &[Arc<Column>] {
                 &self.columns
             }
         }
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn primary_constraint() {
         struct PrimaryTable {
-            column: Vec<Rc<Column>>,
+            column: Vec<Arc<Column>>,
         }
 
         impl Table for PrimaryTable {
@@ -367,7 +367,7 @@ mod tests {
                 "primary_table"
             }
 
-            fn columns(&self) -> &[Rc<Column>] {
+            fn columns(&self) -> &[Arc<Column>] {
                 &self.column
             }
         }
@@ -393,8 +393,8 @@ mod tests {
     #[test]
     fn foreignkey() {
         struct MyTable {
-            hoge_column: Rc<Column>,
-            columns: Vec<Rc<Column>>,
+            hoge_column: Arc<Column>,
+            columns: Vec<Arc<Column>>,
         }
 
         impl MyTable {
@@ -416,7 +416,7 @@ mod tests {
                 "my_table"
             }
 
-            fn columns(&self) -> &[Rc<Column>] {
+            fn columns(&self) -> &[Arc<Column>] {
                 &self.columns
             }
         }
@@ -435,7 +435,7 @@ mod tests {
             .unwrap();
 
         struct ForeignTable {
-            columns: Vec<Rc<Column>>,
+            columns: Vec<Arc<Column>>,
         }
 
         impl ForeignTable {
@@ -459,7 +459,7 @@ mod tests {
                 "foreign_table"
             }
 
-            fn columns(&self) -> &[Rc<Column>] {
+            fn columns(&self) -> &[Arc<Column>] {
                 &self.columns
             }
         }
