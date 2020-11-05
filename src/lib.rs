@@ -44,16 +44,27 @@ pub fn primary_key<K: AsRef<[Arc<Column>]>>(keys: K) -> Arc<Column> {
     )))
 }
 
-pub fn foreign_key<T: Into<String>>(
+pub fn foreign_key<T: Into<TableName>, A: Into<Vec<ForeignKeyAttribute>>>(
     column_name: Arc<Column>,
+    references: ForeignKeyAttribute,
     other_table_name: T,
     other_table_column: Arc<Column>,
+    attributes: A,
 ) -> Arc<Column> {
     Arc::new(Column::Constraint(format!(
-        "FOREIGN KEY ({}) REFERENCES {} ({})",
-        column_name.name(),
-        other_table_name.into(),
-        other_table_column.name()
+        "FOREIGN KEY ({column_name}) {references} {other_table_name} ({other_table_column}){attributes}",
+        column_name = column_name.name(),
+        references = references,
+        other_table_name = other_table_name.into().0,
+        other_table_column = other_table_column.name(),
+        attributes = {
+            let attributes = attributes.into();
+            if attributes.is_empty() {
+                "".to_string()
+            } else {
+                format!(" {}", attributes.iter().map(ToString::to_string).collect::<Vec<_>>().join(" "))
+            }
+        }
     )))
 }
 
@@ -145,6 +156,36 @@ impl Attribute {
     }
 }
 
+#[allow(non_camel_case_types)]
+pub enum ForeignKeyAttribute {
+    REFERENCES,
+    ON_DELETE,
+    ON_UPDATE,
+    SET_NULL,
+    SET_DEFAULT,
+    CASCADE,
+    RESTRICT,
+    NO_ACTION,
+    DEFERRABLE_INITIALLY_DEFERRED,
+}
+
+impl std::fmt::Display for ForeignKeyAttribute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ForeignKeyAttribute::*;
+        match self {
+            REFERENCES => write!(f, "REFERENCES"),
+            ON_DELETE => write!(f, "ON DELETE"),
+            ON_UPDATE => write!(f, "ON UPDATE"),
+            SET_NULL => write!(f, "SET NULL"),
+            SET_DEFAULT => write!(f, "SET DEFAULT"),
+            CASCADE => write!(f, "CASCADE"),
+            RESTRICT => write!(f, "RESTRICT"),
+            NO_ACTION => write!(f, "NO ACTION"),
+            DEFERRABLE_INITIALLY_DEFERRED => write!(f, "DEFERRABLE INITIALLY DEFERRED"),
+        }
+    }
+}
+
 fn escape_string<T: Into<String>>(value: T) -> String {
     let value = value.into();
     if value.contains('\'') {
@@ -222,14 +263,32 @@ impl Column {
     }
 }
 
+pub struct TableName(String);
+
+impl<T: Table> From<&T> for TableName {
+    fn from(value: &T) -> Self {
+        Self(value.name().into())
+    }
+}
+
+impl From<String> for TableName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for TableName {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::Attribute::{DEFAULT, NOT_NULL, PRIMARY_KEY};
-    use crate::Type::{
-        BIGINT, BLOB, BOOLEAN, CLOB, DATE, DATETIME, DOUBLE, DOUBLE_PRECISION, FLOAT, INT, INT2,
-        INT8, INTEGER, MEDIUMINT, NUMERIC, REAL, SMALLINT, TEXT, TINYINT, UNSIGNED_BIG_INT,
-    };
-    use crate::{column, foreign_key, primary_key, unique, Column, Table};
+    use crate::Attribute::*;
+    use crate::ForeignKeyAttribute::*;
+    use crate::Type::*;
+    use crate::*;
     use rusqlite::params;
     use std::sync::Arc;
 
@@ -446,8 +505,10 @@ mod tests {
                         rc_column.clone(),
                         foreign_key(
                             rc_column.clone(),
-                            my_table.name(),
+                            REFERENCES,
+                            my_table,
                             my_table.hoge_column.clone(),
+                            [],
                         ),
                     ],
                 }
