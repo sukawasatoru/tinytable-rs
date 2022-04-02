@@ -102,6 +102,7 @@ pub enum Type {
     BOOLEAN,
     DATE,
     DATETIME,
+    JSON,
 }
 
 impl Type {
@@ -127,6 +128,7 @@ impl Type {
             Type::BOOLEAN => "BOOLEAN",
             Type::DATE => "DATE",
             Type::DATETIME => "DATETIME",
+            Type::JSON => "JSON",
         }
     }
 }
@@ -189,7 +191,7 @@ impl std::fmt::Display for ForeignKeyAttribute {
 fn escape_string<T: Into<String>>(value: T) -> String {
     let value = value.into();
     if value.contains('\'') {
-        format!("\'{}\'", value.replace("\'", "\'\'"))
+        format!("\'{}\'", value.replace('\'', "\'\'"))
     } else {
         format!("\'{}\'", value)
     }
@@ -326,6 +328,7 @@ mod tests {
         let boolean = column("boolean", BOOLEAN, []);
         let date = column("date", DATE, []);
         let datetime = column("datetime", DATETIME, []);
+        let json = column("json", JSON, []);
 
         struct MyTable {
             columns: Vec<Arc<Column>>,
@@ -363,14 +366,15 @@ mod tests {
                 boolean.clone(),
                 date.clone(),
                 datetime.clone(),
+                json.clone(),
             ],
         }
         .create_sql();
 
         assert_eq!(
             sql,
-            format!("CREATE TABLE my_table ({} INTEGER, {} INT, {} TINYINT, {} SMALLINT, {} MEDIUMINT, {} BIGINT, {} UNSIGNED BIG INT, {} INT2, {} INT8, {} TEXT, {} CLOB, {} BLOB, {} REAL, {} DOUBLE, {} DOUBLE PRECISION, {} FLOAT, {} NUMERIC, {} BOOLEAN, {} DATE, {} DATETIME)",
-                    integer.name(), int.name(), tinyint.name(), smallint.name(), mediumint.name(), bigint.name(), unsigned_big_int.name(), int2.name(), int8.name(), text.name(), clob.name(), blob.name(), real.name(), double.name(), double_precision.name(), float.name(), numeric.name(), boolean.name(), date.name(), datetime.name()
+            format!("CREATE TABLE my_table ({} INTEGER, {} INT, {} TINYINT, {} SMALLINT, {} MEDIUMINT, {} BIGINT, {} UNSIGNED BIG INT, {} INT2, {} INT8, {} TEXT, {} CLOB, {} BLOB, {} REAL, {} DOUBLE, {} DOUBLE PRECISION, {} FLOAT, {} NUMERIC, {} BOOLEAN, {} DATE, {} DATETIME, {} JSON)",
+                    integer.name(), int.name(), tinyint.name(), smallint.name(), mediumint.name(), bigint.name(), unsigned_big_int.name(), int2.name(), int8.name(), text.name(), clob.name(), blob.name(), real.name(), double.name(), double_precision.name(), float.name(), numeric.name(), boolean.name(), date.name(), datetime.name(), json.name()
             ));
 
         rusqlite::Connection::open_in_memory()
