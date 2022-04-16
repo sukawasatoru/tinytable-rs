@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 sukawasatoru
+ * Copyright 2020, 2022 sukawasatoru
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -202,6 +202,10 @@ pub trait Table {
 
     fn columns(&self) -> &[Arc<Column>];
 
+    fn indexes(&self) -> &[(String, Vec<Arc<Column>>)] {
+        &[]
+    }
+
     fn create_sql(&self) -> String {
         format!(
             "CREATE TABLE {} ({})",
@@ -212,6 +216,29 @@ pub trait Table {
                 .collect::<Vec<_>>()
                 .join(", ")
         )
+    }
+
+    fn create_index(&self) -> Vec<String> {
+        let indexes = self.indexes();
+        if indexes.is_empty() {
+            return vec![];
+        } else {
+            indexes
+                .iter()
+                .map(|(name, columns)| {
+                    format!(
+                        "CREATE INDEX {} ON {} ({})",
+                        name,
+                        self.name(),
+                        columns
+                            .iter()
+                            .map(|data| data.name())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                })
+                .collect()
+        }
     }
 }
 
@@ -538,5 +565,46 @@ mod tests {
             .unwrap()
             .execute(&foreigntable_sql, params![])
             .unwrap();
+    }
+
+    #[test]
+    fn index() {
+        struct MyTable {
+            columns: Vec<Arc<Column>>,
+            indexes: Vec<(String, Vec<Arc<Column>>)>,
+        }
+
+        impl Table for MyTable {
+            fn name(&self) -> &str {
+                "my_table"
+            }
+
+            fn columns(&self) -> &[Arc<Column>] {
+                &self.columns
+            }
+
+            fn indexes(&self) -> &[(String, Vec<Arc<Column>>)] {
+                &self.indexes
+            }
+        }
+
+        let col1 = column("col1", INTEGER, [PRIMARY_KEY, NOT_NULL]);
+        let col2 = column("col2", TEXT, [NOT_NULL]);
+        let col3 = column("col3", TEXT, [NOT_NULL]);
+        let table = MyTable {
+            columns: vec![col1, col2.clone(), col3.clone()],
+            indexes: vec![
+                ("col2_index".into(), vec![col2.clone()]),
+                ("col2_3_index".into(), vec![col2, col3]),
+            ],
+        };
+
+        let indexes = table.create_index();
+        assert_eq!(2, indexes.len());
+        assert_eq!("CREATE INDEX col2_index ON my_table (col2)", indexes[0]);
+        assert_eq!(
+            "CREATE INDEX col2_3_index ON my_table (col2,col3)",
+            indexes[1]
+        );
     }
 }
